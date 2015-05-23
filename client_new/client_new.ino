@@ -1,13 +1,33 @@
-/* goal: the arduino will WAKE UP once every X miniutes,  and then 
-READ temperature and humidity readings from the sensor,
-STORE the readings as a char array into memory
-Go back to SLEEP again
+/* the chip will wake up once every X miniutes,  
+*then read temperature and humidity readings from the sensor, 
+*store the readings into a data array
+*Go back to sleep again, turn the radio into sleep mode each time. 
+*/
 
-implementation:
-have a read function which takes readings
-every eight seconds, the interrupt vector will be called, increment a counter by one each time - once 
-counter has gotten up to a certain number e.g. 40 for five minutes, then trigger the read sensors function
-This way the device will still wake up every eight seconds, but it will go back to sleep straight after
+/*Ideally encode temperature and humidity values as one byte
+anticipate temp to be in the range -40 to 60 degrees
+one byte can represent values from 0 to 511, therefore resolution of ~0.195 (enough for application)
+Therefore: round(T - (-40) / 0.195) will give a good approxiamation
+
+Read temp then humidity
+
+For humidity, limited to the range of 0 to 100
+round(F/0.195)
+
+2 bytes of data from humidity and temperature readings
+take at twenty minute intervals => 6 bytes per hour, 144 per day
+Send 3 packets per day of 48  bytes, each will carry a different ID to denote which packet it is
+
+/*Knowing what time that packet is sent:
+in the day it is
+The receiver is connected to the internet and can add a timestamp to each received packet, 
+
+ID   Packet   Time
+2    0             15:30
+2    1             18:30
+
+Assume that the data is read in between at regular injtervals, such that 
+
 */
 
 #include <SPI.h>
@@ -22,24 +42,24 @@ volatile byte dataCount = 0; // increments with every reading of the sensor
 
 #define DHTPIN 3
 #define DHTTYPE DHT22
-#define SENSOR_INTERVAL 113 //wait period between sensor readings is this * 8 secs
-#define SEND_INTERVAL 1 
-#define LED 9
+float lowerTempLimit  = -40.0;
+float increment = 0.195;
 
-#define SERIAL FALSE
+#define SENSOR_INTERVAL 1 //wait period between sensor readings is this * 8 secs
+#define SEND_INTERVAL 1 //number of data points before a packet is sent
+
+#define LED 9
+#define SERIAL 1
 #define RADIO_INIT_FAIL 5
 #define RADIO_FREQUENCY_ERROR 10
-#define GOT_REPLY 3 
-#define RECV_FAIL 6
-#define NO_REPLY 9
 
 RH_RF69 rf69;
 
 DHT dht(DHTPIN, DHTTYPE);
 
-uint8_t data[13]; //maximum user message of 28 octets
-char bufferh[6];
-char buffert[6];
+uint8_t data[48];
+uint8_t temp;
+uint8_t humidity;
 
 void flash(int i) {
   for (int i = 0; i<i; i++) {
@@ -50,78 +70,21 @@ void flash(int i) {
   }
 }
 
-void printData() {
-  //print all the data for debugging purposes
-    for(int i = 0; i<5; i++) {
-      Serial.print(F("Humidity: "));
-      for(int j = 0; j<6; j++) {  
-        Serial.print((char) data[12*i +j]);
-      }
-      Serial.print(F(" Temperature: "));
-      for(int j = 6; j<12; j++) {  
-        Serial.print((char)data[12*i + j]);
-      }
-      Serial.print(F("\n"));
-    }
-}
-
 void readSensor() {     
   float t = dht.readTemperature();
-  float h = dht.readHumidity();
+  temp = round((t+lowerTempLimit) / increment);
+  memcpy(&data[dataCount*2], &temp, 1);
   
-  dtostrf(h, 5, 2, bufferh); //converts the float into a char array
-  dtostrf(t, 5, 2, buffert);
-  memcpy(data+(dataCount*12), bufferh, 6); //each reading adds 12B, hence need to copy data 12 bytes along
-                                            
-  memcpy(data+(dataCount*12)+6, buffert, 6); // copy temperature into data array.
+  float h = dht.readHumidity();
+  humidity = round(h / increment);
+  memcpy(&data[dataCount*2+1], &humidity, 1);
+  
 }
 
 void sendData() {
   rf69.send(data, sizeof(data));  
-  rf69.waitPacketSent();
-  // Now wait for a reply
-  uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
-  uint8_t len = sizeof(buf);
-
-  #if SERIAL
-  if (rf69.waitAvailableTimeout(500))
-  { 
-    // Should be a reply message for us now   
-    if (rf69.recv(buf, &len))
-    {
-      Serial.print("got reply: ");
-      Serial.println((char*)buf);
-    }
-    else
-    {
-      Serial.println("recv failed");
-    }
-  }
-  else
-  {
-    Serial.println("No reply, is rf69_server running?");
-  }
-  
-  #else
-     if (rf69.waitAvailableTimeout(500))
-  { 
-    // Should be a reply message for us now   
-    if (rf69.recv(buf, &len))
-    {
-      flash(GOT_REPLY);
-    }
-    else
-    {
-      flash(RECV_FAIL);
-    }
-  }
-  else
-  {
-    flash(NO_REPLY); 
-  }
-  
-  #endif
-
+  //to extend: would simply do this with the other data arrays, possibly having the checking code in another function/possibly not have it at all  
+  rf69.waitPacketSent();  
 }
 
 void watchdogEnable () 
@@ -172,7 +135,6 @@ void setup() {
   Serial.begin(9600);
   
   if (!rf69.init()) {
-    flash(RADIO_INIT_FAIL); 
     Serial.println("init failed");
   }
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM, No encryption
@@ -182,7 +144,7 @@ void setup() {
   
   #else
     if (!rf69.init()) {
-    flash(RADIO_INIT_FAIL); 
+      flash(RADIO_INIT_FAIL); 
   }
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM, No encryption
   if (!rf69.setFrequency(433.0)) { 
@@ -202,6 +164,7 @@ void loop() {
 
  if(dataCount == SEND_INTERVAL) {
         sendData(); 
+        //delay(500) /*may need delay as watchdog has been set*/
         dataCount = 0; 
   } 
   watchdogEnable();
