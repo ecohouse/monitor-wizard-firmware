@@ -19,15 +19,14 @@ take at twenty minute intervals => 6 bytes per hour, 144 per day
 Send 3 packets per day of 48  bytes, each will carry a different ID to denote which packet it is
 
 /*Knowing what time that packet is sent:
-in the day it is
-The receiver is connected to the internet and can add a timestamp to each received packet, 
+Change the ID with each packet which is sent (until it reaches 3), so that we knwo if there has been a lost packet
+The receiver is connected to the internet and can add a timestamp to each received packet, the database should then look like:
 
 ID   Packet   Time
 2    0             15:30
 2    1             18:30
-
-Assume that the data is read in between at regular injtervals, such that 
-
+3    5             19:15
+...
 */
 
 #include <SPI.h>
@@ -37,29 +36,28 @@ Assume that the data is read in between at regular injtervals, such that
 #include <avr/power.h>
 #include "DHT.h"
 
-volatile byte sensorCount = 0;
-volatile byte dataCount = 0; // increments with every reading of the sensor
-
 #define DHTPIN 3
 #define DHTTYPE DHT22
+uint8_t temp;
+uint8_t humidity;
+DHT dht(DHTPIN, DHTTYPE);
+
 float lowerTempLimit  = -40.0;
 float increment = 0.195;
 
+volatile byte sensorCount = 0;
+volatile byte dataCount = 0; // increments with every reading of the sensor
 #define SENSOR_INTERVAL 1 //wait period between sensor readings is this * 8 secs
-#define SEND_INTERVAL 1 //number of data points before a packet is sent
+#define SEND_INTERVAL 1  //number of data points before a packet is sent
 
 #define LED 9
 #define SERIAL 1
 #define RADIO_INIT_FAIL 5
 #define RADIO_FREQUENCY_ERROR 10
 
+#define NODEID 2
 RH_RF69 rf69;
-
-DHT dht(DHTPIN, DHTTYPE);
-
 uint8_t data[48];
-uint8_t temp;
-uint8_t humidity;
 
 void flash(int i) {
   for (int i = 0; i<i; i++) {
@@ -72,18 +70,17 @@ void flash(int i) {
 
 void readSensor() {     
   float t = dht.readTemperature();
-  temp = round((t+lowerTempLimit) / increment);
-  memcpy(&data[dataCount*2], &temp, 1);
+  temp = (uint8_t)round((t-lowerTempLimit) / increment);
+ memcpy(data+dataCount*2, &temp, 1);
   
   float h = dht.readHumidity();
-  humidity = round(h / increment);
-  memcpy(&data[dataCount*2+1], &humidity, 1);
+  humidity = (uint8_t)round(h / increment);
+  memcpy(data+dataCount*2+1, &humidity, 1);
   
 }
 
 void sendData() {
   rf69.send(data, sizeof(data));  
-  //to extend: would simply do this with the other data arrays, possibly having the checking code in another function/possibly not have it at all  
   rf69.waitPacketSent();  
 }
 
@@ -126,6 +123,7 @@ void watchdogEnable ()
   } // end of myWatchdogEnable
     
 ISR(WDT_vect) {
+    sensorCount++;
     wdt_disable();
 }
 
@@ -142,31 +140,35 @@ void setup() {
     Serial.println("setFrequency failed");
   }
   
+  rf69.setTxPower(15);
+  
+  
   #else
     if (!rf69.init()) {
       flash(RADIO_INIT_FAIL); 
   }
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM, No encryption
-  if (!rf69.setFrequency(433.0)) { 
+  if (!rf69.setFrequency(433.0)) { dataCount = 0; 
     flash(RADIO_FREQUENCY_ERROR);
   }
   #endif
 }
 
 void loop() {
+  
  if(sensorCount == SENSOR_INTERVAL) { 
       readSensor();
+      delay(500);
       sensorCount = 0;
       dataCount++;     
- } else {
-      sensorCount++;
- }
+ } 
 
  if(dataCount == SEND_INTERVAL) {
-        sendData(); 
-        //delay(500) /*may need delay as watchdog has been set*/
         dataCount = 0; 
+        sendData(); 
+        delay(1000);
+         /*may need delay as watchdog has been set*/
   } 
   watchdogEnable();
-}
-  
+ 
+}  
