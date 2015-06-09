@@ -6,13 +6,13 @@
 
 /*Ideally encode temperature and humidity values as one byte
 anticipate temp to be in the range -40 to 60 degrees
-one byte can represent values from 0 to 511, therefore resolution of ~0.195 (enough for application)
-Therefore: round(T - (-40) / 0.195) will give a good approxiamation
+one byte can represent values from 0 to 255, therefore resolution of ~0.4 (enough for application)
+Therefore: round(T - (-40) / 0.39) will give a good approxiamation
 
 Read temp then humidity
 
 For humidity, limited to the range of 0 to 100
-round(F/0.195)
+round(F/0.39)
 
 2 bytes of data from humidity and temperature readings
 take at twenty minute intervals => 6 bytes per hour, 144 per day
@@ -30,11 +30,11 @@ ID   Packet   Time
 */
 
 #include <SPI.h>
-#include <RH_RF69.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 #include <avr/power.h>
-#include "DHT.h"
+#include <DHT.h>
+#include <RH_RF69.h>
 
 #define DHTPIN 3
 #define DHTTYPE DHT22
@@ -43,12 +43,12 @@ uint8_t humidity;
 DHT dht(DHTPIN, DHTTYPE);
 
 float lowerTempLimit  = -40.0;
-float increment = 0.195;
+float increment = 0.392;
 
 volatile byte sensorCount = 0;
 volatile byte dataCount = 0; // increments with every reading of the sensor
 #define SENSOR_INTERVAL 1 //wait period between sensor readings is this * 8 secs
-#define SEND_INTERVAL 1  //number of data points before a packet is sent
+#define SEND_INTERVAL 4  //number of data points before a packet is sent
 
 #define LED 9
 #define SERIAL 1
@@ -68,10 +68,11 @@ void flash(int i) {
   }
 }
 
-void readSensor() {     
+void readSensor() { 
+
   float t = dht.readTemperature();
   temp = (uint8_t)round((t-lowerTempLimit) / increment);
- memcpy(data+dataCount*2, &temp, 1);
+  memcpy(data+dataCount*2, &temp, 1);
   
   float h = dht.readHumidity();
   humidity = (uint8_t)round(h / increment);
@@ -86,6 +87,8 @@ void sendData() {
 
 void watchdogEnable () 
   {
+    
+  rf69.setModeIdle();
   // clear various "reset" flags
   MCUSR = 0;     
   // allow changes, disable reset
@@ -139,10 +142,7 @@ void setup() {
   if (!rf69.setFrequency(433.0)) { 
     Serial.println("setFrequency failed");
   }
-  
-  rf69.setTxPower(15);
-  
-  
+   
   #else
     if (!rf69.init()) {
       flash(RADIO_INIT_FAIL); 
@@ -156,19 +156,23 @@ void setup() {
 
 void loop() {
   
- if(sensorCount == SENSOR_INTERVAL) { 
+   if(sensorCount == SENSOR_INTERVAL) { 
+      Serial.print("Reading from sensor\n");
       readSensor();
-      delay(500);
+      Serial.print("Sensor read\n");  
       sensorCount = 0;
       dataCount++;     
  } 
 
  if(dataCount == SEND_INTERVAL) {
+        Serial.print("Sending Data\n");
+        sendData();
+        Serial.print("Sent Data\n");
         dataCount = 0; 
-        sendData(); 
-        delay(1000);
-         /*may need delay as watchdog has been set*/
   } 
+  
+ delay(100); 
   watchdogEnable();
  
+
 }  
