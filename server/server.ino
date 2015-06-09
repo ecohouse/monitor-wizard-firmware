@@ -1,57 +1,56 @@
-// nrf905_server.pde
-// -*- mode: C++ -*-
-// Example sketch showing how to create a simple messageing server
-// with the RH_NRF905 class. RH_NRF905 class does not provide for addressing or
-// reliability, so you should only use RH_NRF905  if you do not need the higher
-// level messaging abilities.
-// It is designed to work with the other example nrf905_client
-// Tested on Teensy3.1 with nRF905 module
-// Tested on Arduino Due with nRF905 module (Caution: use the SPI headers for connecting)
-
 #include <SPI.h>
-#include <RH_NRF905.h>
+#include <RH_RF69.h>
 
 // Singleton instance of the radio driver
-RH_NRF905 nrf905;
+RH_RF69 rf69;
+float increment = 0.392;
+float lowerTempLimit = -40.0;
+
+float decodeTemp(uint8_t temp) {
+  return (float)(temp * increment + lowerTempLimit);
+}
+
+float decodeHumidity(uint8_t humidity) {
+  return (float)(humidity * increment);
+}
 
 void setup() 
 {
   Serial.begin(9600);
-  while (!Serial) 
-    ; // wait for serial port to connect. Needed for Leonardo only
-  if (!nrf905.init())
+  if (!rf69.init())
     Serial.println("init failed");
-  // Defaults after init are 433.2 MHz (channel 108), -10dBm
+    
+  if (!rf69.setFrequency(433.0))
+    Serial.println("setFrequency failed");
 }
 
 void loop()
 {
-  if (nrf905.available())
+  if (rf69.available())
   {
     // Should be a message for us now   
-    uint8_t buf[RH_NRF905_MAX_MESSAGE_LEN];
+    uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-    if (nrf905.recv(buf, &len))
+    
+    if (rf69.recv(buf, &len))
     {
-//    nrf905.printBuffer("request: ", buf, len);
-      Serial.print("Humidity ");
+      Serial.print("got message from Node ");
+      Serial.print(rf69.headerFrom());
+      Serial.print("\n");
       
-      for(int i = 0; i < 6; i++) {
-        Serial.print((char) buf[i]);
-      }
-     
-     Serial.print("Temperature ");
-      for(int i = 6; i < 12; i++ ) {
-       Serial.print((char) buf[i]);
+      for (int i = 0; i<len; i++) {
+        if(i%2 == 0) { //humidity at odd positions
+          Serial.print("Temperature: ");
+          Serial.print(decodeTemp(buf[i]));
+          Serial.print(" ");
+        } else {
+          Serial.print("Humidity: ");
+          Serial.print(decodeHumidity(buf[i]));
+          Serial.print("\n");
+        }
       }
       
       Serial.print("\n");
-      
-      // Send a reply
-      //uint8_t data[] = "Data received";
-      //nrf905.send(data, sizeof(data));
-      //nrf905.waitPacketSent();
-      //Serial.println("Sent a reply");
     }
     else
     {
