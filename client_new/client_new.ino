@@ -48,7 +48,7 @@ float increment = 0.392;
 volatile byte sensorCount = 0;
 volatile byte dataCount = 0; // increments with every reading of the sensor
 #define SENSOR_INTERVAL 1 //wait period between sensor readings is this * 8 secs
-#define SEND_INTERVAL 4  //number of data points before a packet is sent
+#define SEND_INTERVAL 23  //number of data points before a packet is sent
 
 #define LED 9
 #define SERIAL 1
@@ -57,10 +57,10 @@ volatile byte dataCount = 0; // increments with every reading of the sensor
 
 #define NODEID 2
 RH_RF69 rf69;
-uint8_t data[48];
+uint8_t data[49];
 
-void flash(int i) {
-  for (int i = 0; i<i; i++) {
+void flash(int j) {
+  for (int i = 0; i<j; i++) {
     digitalWrite(LED, HIGH);
     delay(50);
     digitalWrite(LED, LOW);
@@ -88,7 +88,7 @@ void sendData() {
 void watchdogEnable () 
   {
     
-  rf69.setModeIdle();
+  rf69.setIdleMode(RH_RF69_OPMODE_MODE_SLEEP);
   // clear various "reset" flags
   MCUSR = 0;     
   // allow changes, disable reset
@@ -142,6 +142,8 @@ void setup() {
   if (!rf69.setFrequency(433.0)) { 
     Serial.println("setFrequency failed");
   }
+  
+  rf69.setHeaderFrom(NODEID);
    
   #else
     if (!rf69.init()) {
