@@ -19,7 +19,7 @@ take at twenty minute intervals => 6 bytes per hour, 144 per day
 Send 3 packets per day of 48  bytes, each will carry a different ID to denote which packet it is
 
 /*Knowing what time that packet is sent:
-Change the ID with each packet which is sent (until it reaches 3), so that we knwo if there has been a lost packet
+Change the packet no with each packet which is sent (until it reaches 3), so that we know if there has been a lost packet
 The receiver is connected to the internet and can add a timestamp to each received packet, the database should then look like:
 
 ID   Packet   Time
@@ -48,10 +48,10 @@ float increment = 0.392;
 volatile byte sensorCount = 0;
 volatile byte dataCount = 0; // increments with every reading of the sensor
 #define SENSOR_INTERVAL 1 //wait period between sensor readings is this * 8 secs
-#define SEND_INTERVAL 23  //number of data points before a packet is sent
+#define SEND_INTERVAL 1  //number of data points before a packet is sent
 
 #define LED 9
-#define SERIAL 1
+#define SERIAL 0
 #define RADIO_INIT_FAIL 5
 #define RADIO_FREQUENCY_ERROR 10
 
@@ -89,6 +89,7 @@ void watchdogEnable ()
   {
     
   rf69.setIdleMode(RH_RF69_OPMODE_MODE_SLEEP);
+  //rf69.setModeIdle();
   // clear various "reset" flags
   MCUSR = 0;     
   // allow changes, disable reset
@@ -150,30 +151,34 @@ void setup() {
       flash(RADIO_INIT_FAIL); 
   }
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM, No encryption
-  if (!rf69.setFrequency(433.0)) { dataCount = 0; 
+  if (!rf69.setFrequency(433.0)) { 
     flash(RADIO_FREQUENCY_ERROR);
   }
+  
+  rf69.setHeaderFrom(NODEID);
+  rf69.setTxPower(14);
+  
   #endif
 }
 
 void loop() {
   
    if(sensorCount == SENSOR_INTERVAL) { 
-      Serial.print("Reading from sensor\n");
+      //Serial.print("Reading from sensor\n");
       readSensor();
-      Serial.print("Sensor read\n");  
+      //Serial.print("Sensor read\n");  
       sensorCount = 0;
       dataCount++;     
  } 
 
  if(dataCount == SEND_INTERVAL) {
-        Serial.print("Sending Data\n");
+        //Serial.print("Sending Data\n");
         sendData();
-        Serial.print("Sent Data\n");
+        //Serial.print("Sent Data\n");
         dataCount = 0; 
   } 
   
- delay(100); 
+  //delay(100); 
   watchdogEnable();
  
 
