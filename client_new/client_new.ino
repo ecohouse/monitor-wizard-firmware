@@ -147,7 +147,7 @@ void setup() {
       flash(RADIO_INIT_FAIL); 
   }
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM, No encryption
-  if (!rf69.setFrequency(433.0)) { 
+  if (!rf69.setFrequency(915.0)) { 
     flash(RADIO_FREQUENCY_ERROR);
   }
   
