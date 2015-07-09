@@ -16,16 +16,12 @@ round(F/0.39)
 
 2 bytes of data from humidity and temperature readings
 take at twenty minute intervals => 6 bytes per hour, 144 per day
-Send 3 packets per day of 48  bytes, each will carry a different ID to denote which packet it is
+Send 3 packets per day of 48  bytes, 
 
-/*Knowing what time that packet is sent:
-Change the packet no with each packet which is sent (until it reaches 3), so that we know if there has been a lost packet
-The receiver is connected to the internet and can add a timestamp to each received packet, the database should then look like:
-
-ID   Packet   Time
-2    0             15:30
-2    1             18:30
-3    5             19:15
+ID    Time
+2     15:30
+2     18:30
+3     19:15
 ...
 */
 
@@ -47,11 +43,11 @@ float increment = 0.392;
 
 volatile byte sensorCount = 0;
 volatile byte dataCount = 0; // increments with every reading of the sensor
-#define SENSOR_INTERVAL 1 //wait period between sensor readings is this * 8 secs
-#define SEND_INTERVAL 1  //number of data points before a packet is sent
+#define SENSOR_INTERVAL 150 //wait period between sensor readings is this * 8 secs
+#define SEND_INTERVAL 24  //number of data points before a packet is sent
 
 #define LED 9
-#define SERIAL 0
+//#define SERIAL 
 #define RADIO_INIT_FAIL 5
 #define RADIO_FREQUENCY_ERROR 10
 
@@ -140,7 +136,7 @@ void setup() {
     Serial.println("init failed");
   }
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM, No encryption
-  if (!rf69.setFrequency(433.0)) { 
+  if (!rf69.setFrequency(915.0)) { 
     Serial.println("setFrequency failed");
   }
   
@@ -172,9 +168,13 @@ void loop() {
  } 
 
  if(dataCount == SEND_INTERVAL) {
-        //Serial.print("Sending Data\n");
+        #ifdef DEBUG
+        Serial.print("Sending Data\n");
+        #endif
         sendData();
-        //Serial.print("Sent Data\n");
+        #ifdef DEBUG
+        Serial.print("Sent Data\n");
+        #endif
         dataCount = 0; 
   } 
   
