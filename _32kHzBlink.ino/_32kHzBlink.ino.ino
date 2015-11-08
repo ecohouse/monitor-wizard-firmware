@@ -15,7 +15,7 @@ void setup() {
   //TCCR2B = (1<<CS22)|(1<<CS21)|(1<<CS20); //8-second resolution saves power at the expense of precision.
   ASSR = (1 << AS2); //Enable asynchronous operation
   TIMSK2 = (1 << TOIE2); //Enable timer 2 overflow interrupt
-  Serial.begin(9600);gi
+  Serial.begin(9600);
   sei(); //enable interrupt
 }
 
